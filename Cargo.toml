@@ -19,4 +19,6 @@ rand_core = "0.5"
 sha2 = "0.9.1"
 
 [dev-dependencies]
+base64 = "0.12"
 rand = "0.7"
+hex = "0.4"
