@@ -47,13 +47,11 @@ use curve25519_dalek::{
 };
 use hkdf::Hkdf;
 use rand_core::{CryptoRng, RngCore};
-use sha2::Sha512;
+use sha2::Sha256;
 
 #[derive(Copy, Clone)]
 /// The output of the PAKE: a password-authenticated key.
-///
-/// XXX this should be 32 bytes.
-pub struct Key(pub [u8; 64]);
+pub struct Key(pub [u8; 32]);
 /// The message sent by the initiator to the responder.
 #[derive(Copy, Clone)]
 pub struct InitMessage(pub [u8; 48]);
@@ -111,16 +109,19 @@ impl<'ctx> Context<'ctx> {
 
         let len = u16::try_from(self.initiator_id.len())
             .map_err(|_| Error::InitiatorIdTooLong(self.initiator_id.len()))?;
+
         bytes.extend_from_slice(&len.to_be_bytes());
         bytes.extend_from_slice(self.initiator_id.as_bytes());
 
         let len = u16::try_from(self.responder_id.len())
             .map_err(|_| Error::ResponderIdTooLong(self.responder_id.len()))?;
+
         bytes.extend_from_slice(&len.to_be_bytes());
         bytes.extend_from_slice(self.responder_id.as_bytes());
 
         let len = u16::try_from(self.associated_data.len())
             .map_err(|_| Error::AssociatedDataTooLong(self.associated_data.len()))?;
+
         bytes.extend_from_slice(&len.to_be_bytes());
         bytes.extend_from_slice(self.associated_data);
 
@@ -130,10 +131,10 @@ impl<'ctx> Context<'ctx> {
 
 fn secret_generator(password: &str, salt: &[u8], context_bytes: &[u8]) -> RistrettoPoint {
     let mut output = [0; 64];
-    // XXX Why does this use Sha512 instead of Sha256?
-    Hkdf::<Sha512>::new(Some(salt), password.as_bytes())
+    Hkdf::<Sha256>::new(Some(salt), password.as_bytes())
         .expand(context_bytes, &mut output)
         .expect("64 bytes is less than max output size");
+
     RistrettoPoint::from_uniform_bytes(&output)
 }
 
@@ -189,14 +190,14 @@ pub fn respond<R: RngCore + CryptoRng>(
         .decompress()
         .ok_or(Error::InvalidPoint)?;
 
-    let (key_bytes, _) = Hkdf::<Sha512>::extract(
+    let (key_bytes, _) = Hkdf::<Sha256>::extract(
         Some(&transcript(init_msg, rsp_msg)[..]),
         (b * A).compress().as_bytes(),
     );
 
     let key = {
         // awkward dance to extract from a GenericArray
-        let mut bytes = [0; 64];
+        let mut bytes = [0; 32];
         bytes.copy_from_slice(&key_bytes[..]);
         Key(bytes)
     };
@@ -222,14 +223,14 @@ impl AwaitingResponse {
             .decompress()
             .ok_or(Error::InvalidPoint)?;
 
-        let (key_bytes, _) = Hkdf::<Sha512>::extract(
+        let (key_bytes, _) = Hkdf::<Sha256>::extract(
             Some(&transcript(self.init_msg, rsp_msg)[..]),
             (self.a * B).compress().as_bytes(),
         );
 
         let key = {
             // awkward dance to extract from a GenericArray
-            let mut bytes = [0; 64];
+            let mut bytes = [0; 32];
             bytes.copy_from_slice(&key_bytes[..]);
             Key(bytes)
         };
